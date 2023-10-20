@@ -7,15 +7,7 @@
     &lt;TestId&gt;NUnit3x::0218E37A-55D5-483D-8C5E-558AB032500C::net7.0::RandomChat.Tests.Tests.ServerStarts&lt;/TestId&gt;
   &lt;/TestAncestor&gt;
 &lt;/SessionState&gt;</s:String>
-	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=6d05e88f_002D793c_002D4219_002Da335_002D1c6453fd8e4c/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="ClientConnects #2" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;
-  &lt;Or&gt;
-    &lt;TestAncestor&gt;
-      &lt;TestId&gt;NUnit3x::938DB9C6-BD4C-4255-AAE7-FD4A15C35414::net7.0::Server.Tests.Tests.ClientConnects&lt;/TestId&gt;
-      &lt;TestId&gt;NUnit3x::0218E37A-55D5-483D-8C5E-558AB032500C::net7.0::RandomChat.Tests.Tests.ServerStarts&lt;/TestId&gt;
-      &lt;TestId&gt;NUnit3x::0218E37A-55D5-483D-8C5E-558AB032500C::net7.0::RandomChat.Tests.Tests.ClientsGetAssigned&lt;/TestId&gt;
-      &lt;TestId&gt;NUnit3x::938DB9C6-BD4C-4255-AAE7-FD4A15C35414::net7.0::Server.Tests.Tests.ClientsHaveUniqueGuids&lt;/TestId&gt;
-    &lt;/TestAncestor&gt;
-    &lt;Project Location="/Users/lucas/Documents/GitHub/RandomChat/Tests/RandomChat.Tests" Presentation="&amp;lt;Tests&amp;gt;\&amp;lt;RandomChat.Tests&amp;gt;" /&gt;
-  &lt;/Or&gt;
+	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=6d05e88f_002D793c_002D4219_002Da335_002D1c6453fd8e4c/@EntryIndexedValue">&lt;SessionState ContinuousTestingIsOn="True" ContinuousTestingMode="1" IsActive="True" Name="ClientConnects #2" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
+  &lt;Project Location="C:\dev\RandomChat" Presentation="&amp;lt;Tests&amp;gt;" /&gt;&#xD;
 &lt;/SessionState&gt;</s:String>
 	</wpf:ResourceDictionary>

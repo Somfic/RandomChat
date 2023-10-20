@@ -1,133 +1,7 @@
-﻿using System.Collections.Immutable;
-using System.Text.Json;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+
 namespace RandomChat;
-
-public readonly struct ServerMessage
-{
-    public ServerMessage(MessageType type, string? data = null) {
-        Type = type;
-        Data = data;
-    }
-    
-    public MessageType Type { get; }
-    
-    public string? Data { get; }
-    
-    public enum MessageType
-    {
-        WaitingForPartner,
-        PartnerConnected,
-        PartnerDisconnected,
-        PartnerMessage
-    }
-}
-
-public class RandomServer
-{
-    private readonly ILogger<RandomServer> _log;
-    private readonly Tcp.Server _server;
-    
-    private readonly Queue<Guid> _waitingClients = new();
-    private readonly Dictionary<Guid, Guid> _rooms = new();
-
-    public RandomServer(ILogger<RandomServer> log, Tcp.Server server)
-    {
-        _log = log;
-        _server = server;
-    }
-    
-    public IReadOnlyCollection<Guid> WaitingClients => _waitingClients.ToImmutableArray();
-    public IReadOnlyDictionary<Guid, Guid> Rooms => _rooms.ToImmutableDictionary();
-    
-    public int Port => _server.Port;
-
-    public async Task StartAsync()
-    {
-        _server.OnClientConnected(OnClientConnected);
-        _server.OnClientDisconnected(OnClientDisconnected);
-        _server.OnClientRequested(OnClientMessage);
-        
-        await _server.StartAsync();
-    }
-
-    private async Task OnClientConnected(Guid client)
-    {
-        await EnqueueClient(client);
-    }
-
-    private async Task OnClientMessage(Guid client, string json)
-    {
-        var data = JsonSerializer.Deserialize<ServerMessage>(json);
-        
-        if (data.Type != ServerMessage.MessageType.PartnerMessage)
-            return;
-        
-        if (data.Data == null)
-        {
-            _log.LogWarning("Partner message is null");
-            return;
-        }
-        
-        if (!_rooms.ContainsKey(client))
-        {
-            _log.LogWarning("Client {Client} is not in a room", client);
-            return;
-        }
-        
-        
-        if (_rooms.TryGetValue(client, out var partner))
-            await _server.SendAsync(partner, new ServerMessage(ServerMessage.MessageType.PartnerMessage, data.Data));
-    }
-
-    private async Task OnClientDisconnected(Guid client)
-    {
-        // Remove the disconnected client from the room
-        _rooms.Remove(client);
-        
-        // Check if the partner is still connected
-        if (_rooms.TryGetValue(client, out var partner) && !_server.IsConnected(partner))
-        {
-            // Let the partner know that the other client disconnected
-            await _server.SendAsync(partner, new ServerMessage(ServerMessage.MessageType.PartnerDisconnected));
-            _rooms.Remove(partner);
-            
-            // Re-enqueue the partner
-            await EnqueueClient(partner);
-        }
-    }
-    
-    private async Task EnqueueClient(Guid client)
-    {
-        _waitingClients.Enqueue(client);
-        await _server.SendAsync(client, new ServerMessage(ServerMessage.MessageType.WaitingForPartner));
-        
-        
-        await TryMatchMaking();
-    }
-    
-    private async Task TryMatchMaking()
-    {
-        if (_waitingClients.Count < 2)
-            return;
-        
-        var client1 = _waitingClients.Dequeue();
-        var client2 = _waitingClients.Dequeue();
-        
-        _log.LogInformation("Matched {Client1} with {Client2}", client1, client2);
-        
-        _rooms.Add(client1, client2);
-        _rooms.Add(client2, client1);
-        
-        await _server.SendAsync(client1, new ServerMessage(ServerMessage.MessageType.PartnerConnected));
-        await _server.SendAsync(client2, new ServerMessage(ServerMessage.MessageType.PartnerConnected));
-    }
-
-    public async Task StopAsync()
-    {
-        await _server.StopAsync();
-    }
-}
 
 public class RandomClient
 {
@@ -187,7 +61,9 @@ public class RandomClient
     
     private async Task OnServerResponded(string json)
     {
-        var data = JsonSerializer.Deserialize<ServerMessage>(json);
+        var data = JsonConvert.DeserializeObject<ServerMessage>(json);
+        
+        _log.LogDebug("Server responded with {Type}. {Json}", data.Type.ToString(), json);
 
         switch (data.Type)
         {
@@ -238,11 +114,9 @@ public class RandomClient
         }
     }
     
-    
-    
     private Task OnServerDisconnected()
     {
-        throw new NotImplementedException();
+        return Task.CompletedTask;
     }
     
     public delegate Task PartnerConnected();

@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 
 namespace Tcp;
 
@@ -87,8 +88,7 @@ public class Server
         // Start on a new thread so that multiple clients can be handled at the same time
         Task.Run(async () =>
         {
-            try
-            {
+          
                 foreach (var handler in _connectedHandlers)
                 {
                     try
@@ -102,32 +102,40 @@ public class Server
                     }
                 }
 
-                var stream = client.GetStream();
-                var buffer = new byte[4096];
-
-                while (client.Connected)
+                try
                 {
-                    var read = await stream.ReadAsync(buffer);
 
-                    if (read == 0)
-                        break;
+                    var stream = client.GetStream();
+                    var buffer = new byte[4096];
 
-                    var data = Encoding.GetString(buffer, 0, read);
-
-                    _log.LogTrace("{Guid}: {Data}", guid, data);
-
-                    foreach (var handler in _requestedHandlers)
+                    while (client.Connected)
                     {
-                        try
+                        var read = await stream.ReadAsync(buffer);
+
+                        if (read == 0)
+                            break;
+
+                        var data = Encoding.GetString(buffer, 0, read);
+
+                        _log.LogTrace("< {Guid}: {Data}", guid, data);
+
+                        foreach (var handler in _requestedHandlers)
                         {
-                            await handler(guid, data);
-                        }
-                        catch (Exception ex)
-                        {
-                            _log.LogWarning(ex, "{Guid}: Unhandled exception in {Delegate} on data received", guid,
-                                handler.Method.Name);
+                            try
+                            {
+                                await handler(guid, data);
+                            }
+                            catch (Exception ex)
+                            {
+                                _log.LogWarning(ex, "{Guid}: Unhandled exception in {Delegate} on data received", guid,
+                                    handler.Method.Name);
+                            }
                         }
                     }
+                }
+                catch (Exception ex)
+                {
+                    _log.LogError(ex, "Unhandled exception in client handler");
                 }
 
                 _log.LogDebug("Client {Guid} disconnected", guid);
@@ -146,21 +154,25 @@ public class Server
                 }
 
                 _clients.Remove(guid);
-            } catch (Exception ex) {
-                _log.LogError(ex, "Unhandled exception in client handler");
-            }
         });
     }
     
     public async Task SendAsync<T>(Guid client, T data) where T : struct
     {
-        if(!_clients.ContainsKey(client))
+        if (!_clients.ContainsKey(client))
+        {
             _log.LogWarning("Client {Guid} not found. Connected clients: {Clients}", client, _clients.Keys);
-        
+            throw new ArgumentException("Client not found", nameof(client));
+        }
+
         var clientStream = _clients[client].GetStream();
-        var json = JsonSerializer.Serialize(data);
+        var json = JsonConvert.SerializeObject(data);
+        
+        _log.LogTrace("> {Guid}: {Data}", client, json);
+        
         var buffer = Encoding.GetBytes(json);
         await clientStream.WriteAsync(buffer);
+        await clientStream.FlushAsync();
     }
 
     public async Task SendAsync<T>(T data) where T : struct

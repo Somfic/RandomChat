@@ -12,6 +12,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Server.Tests.Manual", "Test
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RandomChat.Tests", "Tests\RandomChat.Tests\RandomChat.Tests.csproj", "{0218E37A-55D5-483D-8C5E-558AB032500C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RandomChat.Test.Manual.Server", "Tests\RandomChat.Test.Manual.Server\RandomChat.Test.Manual.Server.csproj", "{1C277B25-68DA-4EF7-969C-8DD99593771A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RandomChat.Test.Manual.Client", "Tests\RandomChat.Test.Manual.Client\RandomChat.Test.Manual.Client.csproj", "{FA82A501-EE7B-4388-9D88-180001461997}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -38,10 +42,20 @@ Global
 		{0218E37A-55D5-483D-8C5E-558AB032500C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0218E37A-55D5-483D-8C5E-558AB032500C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0218E37A-55D5-483D-8C5E-558AB032500C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1C277B25-68DA-4EF7-969C-8DD99593771A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1C277B25-68DA-4EF7-969C-8DD99593771A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1C277B25-68DA-4EF7-969C-8DD99593771A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1C277B25-68DA-4EF7-969C-8DD99593771A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FA82A501-EE7B-4388-9D88-180001461997}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FA82A501-EE7B-4388-9D88-180001461997}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FA82A501-EE7B-4388-9D88-180001461997}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FA82A501-EE7B-4388-9D88-180001461997}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{938DB9C6-BD4C-4255-AAE7-FD4A15C35414} = {78ADDDDC-CD15-46E5-A0B6-FA6ABD8B7B95}
 		{A47C4008-094B-44C3-86E1-EE49375C5848} = {78ADDDDC-CD15-46E5-A0B6-FA6ABD8B7B95}
 		{0218E37A-55D5-483D-8C5E-558AB032500C} = {78ADDDDC-CD15-46E5-A0B6-FA6ABD8B7B95}
+		{1C277B25-68DA-4EF7-969C-8DD99593771A} = {78ADDDDC-CD15-46E5-A0B6-FA6ABD8B7B95}
+		{FA82A501-EE7B-4388-9D88-180001461997} = {78ADDDDC-CD15-46E5-A0B6-FA6ABD8B7B95}
 	EndGlobalSection
 EndGlobal

@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Newtonsoft.Json;
 
 namespace Tcp;
 
@@ -76,7 +77,7 @@ public class Client
 
             var data = Encoding.GetString(buffer, 0, read);
 
-            _log.LogTrace("Server: {Data}", data);
+            _log.LogTrace("< Server: {Data}", data);
 
             foreach (var handler in _respondedHandlers)
             {
@@ -112,11 +113,13 @@ public class Client
 
     public async Task SendAsync<T>(T data) where T : struct
     {
-        _log.LogTrace("Client: {Data}", data);
-        
         var clientStream = _client.GetStream();
-        var json = JsonSerializer.Serialize(data);
+        var json = JsonConvert.SerializeObject(data);
+        
+        _log.LogTrace("< Server: {Data}", json);
+        
         var buffer = Encoding.GetBytes(json);
         await clientStream.WriteAsync(buffer);
+        await clientStream.FlushAsync();
     }
 }

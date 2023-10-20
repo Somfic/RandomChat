@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Newtonsoft.Json;
 
 namespace Server.Tests;
 
@@ -59,7 +60,7 @@ public class Tests
         await server.StartAsync();
         await client.ConnectAsync(server.Port);
         
-        await client.SendAsync(data);
+        await client.SendAsync(new TestMessage(data));
         
         await server.StopAsync();
         
@@ -75,22 +76,50 @@ public class Tests
         
         var clientReceivedMessage = new TaskCompletionSource<bool>();
         
-        client.OnServerResponded(message =>
+        client.OnServerResponded(json =>
         {
-            clientReceivedMessage.SetResult(message == data);
+            var incomingData = JsonConvert.DeserializeObject<TestMessage>(json);
+            clientReceivedMessage.SetResult(incomingData.Data == data);
             return Task.CompletedTask;
         });
         
         await server.StartAsync();
         await client.ConnectAsync(server.Port);
         
-        await client.SendAsync(data);
+        await client.SendAsync(new TestMessage(data));
         
         await Task.WhenAny(clientReceivedMessage.Task, Task.Delay(1000));
         
         Assert.That(clientReceivedMessage.Task.Result, Is.EqualTo(true));
         
         await server.StopAsync();
+    }
+
+    [Test]
+    public async Task ClientsHaveUniqueGuids()
+    {
+        var (server, clients) = BuildServerClients(10);
+        
+        var guids = new List<Guid>();
+        
+        server.OnClientConnected(guid =>
+        {
+            guids.Add(guid);
+            return Task.CompletedTask;
+        });
+        
+        await server.StartAsync();
+        
+        foreach (var client in clients)
+            await client.ConnectAsync(server.Port);
+        
+        await Task.Delay(1000);
+        
+        await server.StopAsync();
+        
+        Assert.That(guids, Is.Unique);
+        Assert.That(guids, Has.Count.EqualTo(10));
+        Assert.That(guids, Has.No.Member(Guid.Empty));
     }
 
     private static (Tcp.Server server, Tcp.Client client) BuildServerClient()
@@ -126,4 +155,14 @@ public class Tests
         })
         .Build()
         .Services;
+
+    private struct TestMessage
+    {
+        public TestMessage(string data)
+        {
+            Data = data;
+        }
+        
+        public string Data { get; }
+    }
 }

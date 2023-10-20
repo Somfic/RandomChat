@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -78,72 +79,103 @@ public class Server
 
     private void HandleClient(TcpClient client)
     {
+        var guid = Guid.NewGuid();
+        _clients.Add(guid, client);
+
+        _log.LogDebug("{Guid} connected", guid);
+        
         // Start on a new thread so that multiple clients can be handled at the same time
         Task.Run(async () =>
         {
-            var guid = Guid.NewGuid();
-            _clients.Add(guid, client);
-            
-            _log.LogDebug("{Guid} connected", guid);
-
-            foreach (var handler in _connectedHandlers)
+            try
             {
-                try { await handler(guid); }
-                catch(Exception ex)
+                foreach (var handler in _connectedHandlers)
                 {
-                    _log.LogWarning(ex, "{Guid}: Unhandled exception in {Delegate} on connect", guid, handler.Method.Name);
-                }
-            }
-            
-            var stream = client.GetStream();
-            var buffer = new byte[4096];
-            
-            while (client.Connected)
-            {
-                var read = await stream.ReadAsync(buffer);
-                
-                if (read == 0)
-                    break;
-                
-                var data = Encoding.GetString(buffer, 0, read);
-                
-                _log.LogTrace("{Guid}: {Data}", guid, data);
-
-                foreach (var handler in _requestedHandlers)
-                {
-                    try { await handler(guid, data); } 
-                    catch(Exception ex) 
+                    try
                     {
-                        _log.LogWarning(ex, "{Guid}: Unhandled exception in {Delegate} on data received", guid, handler.Method.Name);
+                        await handler(guid);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.LogWarning(ex, "{Guid}: Unhandled exception in {Delegate} on connect", guid,
+                            handler.Method.Name);
                     }
                 }
-            }
-            
-            _log.LogDebug("Client {Guid} disconnected", guid);
 
-            foreach (var handler in _disconnectedHandlers)
-            {
-                try { await handler(guid); } 
-                catch(Exception ex) {
-                    _log.LogWarning(ex, "{Guid}: Unhandled exception in {Delegate} on disconnect", guid, handler.Method.Name);
+                var stream = client.GetStream();
+                var buffer = new byte[4096];
+
+                while (client.Connected)
+                {
+                    var read = await stream.ReadAsync(buffer);
+
+                    if (read == 0)
+                        break;
+
+                    var data = Encoding.GetString(buffer, 0, read);
+
+                    _log.LogTrace("{Guid}: {Data}", guid, data);
+
+                    foreach (var handler in _requestedHandlers)
+                    {
+                        try
+                        {
+                            await handler(guid, data);
+                        }
+                        catch (Exception ex)
+                        {
+                            _log.LogWarning(ex, "{Guid}: Unhandled exception in {Delegate} on data received", guid,
+                                handler.Method.Name);
+                        }
+                    }
                 }
+
+                _log.LogDebug("Client {Guid} disconnected", guid);
+
+                foreach (var handler in _disconnectedHandlers)
+                {
+                    try
+                    {
+                        await handler(guid);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.LogWarning(ex, "{Guid}: Unhandled exception in {Delegate} on disconnect", guid,
+                            handler.Method.Name);
+                    }
+                }
+
+                _clients.Remove(guid);
+            } catch (Exception ex) {
+                _log.LogError(ex, "Unhandled exception in client handler");
             }
-            
-            _clients.Remove(guid);
         });
     }
-
-    public async Task SendAsync(Guid client, string data)
+    
+    public async Task SendAsync<T>(Guid client, T data) where T : struct
     {
+        if(!_clients.ContainsKey(client))
+            _log.LogWarning("Client {Guid} not found. Connected clients: {Clients}", client, _clients.Keys);
+        
         var clientStream = _clients[client].GetStream();
-        var buffer = Encoding.GetBytes(data);
+        var json = JsonSerializer.Serialize(data);
+        var buffer = Encoding.GetBytes(json);
         await clientStream.WriteAsync(buffer);
     }
 
-    public async Task SendAsync(string data)
+    public async Task SendAsync<T>(T data) where T : struct
     {
         foreach (var client in _clients)
             await SendAsync(client.Key, data);
+    }
+
+    public bool IsConnected(Guid client)
+    {
+        if (!_clients.ContainsKey(client))
+            return false;
+        
+        var tcpClient = _clients[client];
+        return tcpClient.Connected;
     }
 }
 

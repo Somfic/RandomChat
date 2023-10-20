@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 
@@ -24,6 +25,8 @@ public class Client
         _log = log;
         _port = config.GetValue("Tcp:Port", 51555);
     }
+
+    public int Port => _client.Client.LocalEndPoint is IPEndPoint endpoint ? endpoint.Port : 0;
 
     public async Task ConnectAsync(int? port = null)
     {
@@ -107,12 +110,13 @@ public class Client
     public delegate Task ServerRespondedDelegate(string data);
     public delegate Task ServerDisconnectedDelegate();
 
-    public async Task SendAsync(string data)
+    public async Task SendAsync<T>(T data) where T : struct
     {
         _log.LogTrace("Client: {Data}", data);
         
         var clientStream = _client.GetStream();
-        var buffer = Encoding.GetBytes(data);
+        var json = JsonSerializer.Serialize(data);
+        var buffer = Encoding.GetBytes(json);
         await clientStream.WriteAsync(buffer);
     }
 }

@@ -23,12 +23,12 @@ var client = host.Services.GetRequiredService<Client>();
 
 client.OnServerConnected(async () =>
 {
-    await client.SendAsync("Hello from client");
+    await client.SendAsync(new TestMessage("Hello from client"));
 });
 
 server.OnClientRequested(async (client, data) =>
 {
-    await server.SendAsync(client, "Hello back from server");
+    await server.SendAsync(client, new TestMessage("Hello from server"));
 });
 
 await server.StartAsync();
@@ -36,3 +36,15 @@ await client.ConnectAsync(server.Port);
 
 Console.WriteLine("Press any key to exit");
 Console.ReadKey();
+
+await server.StopAsync();
+
+struct TestMessage
+{
+    public TestMessage(string data)
+    {
+        Data = data;
+    }
+    
+    public string Data { get; }
+}

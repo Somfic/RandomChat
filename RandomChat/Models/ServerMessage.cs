@@ -1,6 +1,8 @@
-﻿namespace RandomChat;
+﻿using Tcp.Abstractions;
 
-public readonly struct ServerMessage
+namespace RandomChat.Models;
+
+public readonly struct ServerMessage : ITcpMessage
 {
     public ServerMessage(MessageType type, string? data = null) {
         Type = type;
@@ -16,6 +18,7 @@ public readonly struct ServerMessage
         WaitingForPartner,
         PartnerConnected,
         PartnerDisconnected,
+        PartnerTyping,
         PartnerMessage
     }
 }

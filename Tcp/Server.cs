@@ -1,14 +1,14 @@
 ﻿using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using Tcp.Abstractions;
 
 namespace Tcp;
 
-public class Server
+public class Server : IServer
 {
     private static readonly Encoding Encoding = Encoding.UTF8;
 
@@ -17,9 +17,9 @@ public class Server
     private readonly TcpListener _listener;
     private readonly Dictionary<Guid, TcpClient> _clients = new();
     
-    private readonly List<ClientConnectedToServerDelegate> _connectedHandlers = new();
-    private readonly List<ClientRequestedToServerDelegate> _requestedHandlers = new();
-    private readonly List<ClientDisconnectedFromServerDelegate> _disconnectedHandlers = new();
+    private readonly List<IServer.ClientConnectedToServerDelegate> _connectedHandlers = new();
+    private readonly List<IServer.ClientRequestedToServerDelegate> _requestedHandlers = new();
+    private readonly List<IServer.ClientDisconnectedFromServerDelegate> _disconnectedHandlers = new();
     
     public Server(ILogger<Server> log, IConfiguration config)
     {
@@ -69,15 +69,48 @@ public class Server
             await Task.Delay(1);
     }
     
-    public void OnClientConnected(ClientConnectedToServerDelegate callback) =>
+    public void OnClientConnected(IServer.ClientConnectedToServerDelegate callback) =>
         _connectedHandlers.Add(callback);
     
-    public void OnClientRequested(ClientRequestedToServerDelegate callback) =>
+    public void OnClientRequested(IServer.ClientRequestedToServerDelegate callback) =>
         _requestedHandlers.Add(callback);
     
-    public void OnClientDisconnected(ClientDisconnectedFromServerDelegate callback) =>
+    public void OnClientDisconnected(IServer.ClientDisconnectedFromServerDelegate callback) =>
         _disconnectedHandlers.Add(callback);
+    
+    public async Task SendAsync<T>(Guid client, T data) where T : ITcpMessage
+    {
+        if (!_clients.ContainsKey(client))
+        {
+            _log.LogWarning("Client {Guid} not found. Connected clients: {Clients}", client, _clients.Keys);
+            throw new ArgumentException("Client not found", nameof(client));
+        }
 
+        var clientStream = _clients[client].GetStream();
+        var json = JsonConvert.SerializeObject(data);
+        
+        _log.LogTrace("> {Guid}: {Data}", client, json);
+        
+        var buffer = Encoding.GetBytes(json);
+        await clientStream.WriteAsync(buffer);
+        await clientStream.FlushAsync();
+    }
+
+    public async Task SendAsync<T>(T data) where T : ITcpMessage
+    {
+        foreach (var client in _clients)
+            await SendAsync(client.Key, data);
+    }
+
+    public bool IsConnected(Guid client)
+    {
+        if (!_clients.ContainsKey(client))
+            return false;
+        
+        var tcpClient = _clients[client];
+        return tcpClient.Connected;
+    }
+    
     private void HandleClient(TcpClient client)
     {
         var guid = Guid.NewGuid();
@@ -156,41 +189,4 @@ public class Server
                 _clients.Remove(guid);
         });
     }
-    
-    public async Task SendAsync<T>(Guid client, T data) where T : struct
-    {
-        if (!_clients.ContainsKey(client))
-        {
-            _log.LogWarning("Client {Guid} not found. Connected clients: {Clients}", client, _clients.Keys);
-            throw new ArgumentException("Client not found", nameof(client));
-        }
-
-        var clientStream = _clients[client].GetStream();
-        var json = JsonConvert.SerializeObject(data);
-        
-        _log.LogTrace("> {Guid}: {Data}", client, json);
-        
-        var buffer = Encoding.GetBytes(json);
-        await clientStream.WriteAsync(buffer);
-        await clientStream.FlushAsync();
-    }
-
-    public async Task SendAsync<T>(T data) where T : struct
-    {
-        foreach (var client in _clients)
-            await SendAsync(client.Key, data);
-    }
-
-    public bool IsConnected(Guid client)
-    {
-        if (!_clients.ContainsKey(client))
-            return false;
-        
-        var tcpClient = _clients[client];
-        return tcpClient.Connected;
-    }
 }
-
-public delegate Task ClientConnectedToServerDelegate(Guid client);
-public delegate Task ClientRequestedToServerDelegate(Guid client, string data);
-public delegate Task ClientDisconnectedFromServerDelegate(Guid client);

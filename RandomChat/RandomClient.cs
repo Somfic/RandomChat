@@ -1,24 +1,42 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Collections.Immutable;
+using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using RandomChat.Abstractions;
+using RandomChat.Models;
+using Tcp.Abstractions;
 
 namespace RandomChat;
 
-public class RandomClient
+public class RandomClient : IRandomClient
 {
     private readonly ILogger<RandomClient> _log;
-    private readonly Tcp.Client _client;
+    private readonly IClient _client;
     
-    private readonly List<PartnerConnected> _partnerConnectedHandlers = new();
-    private readonly List<PartnerDisconnected> _partnerDisconnectedHandlers = new();
-    private readonly List<PartnerMessage> _partnerMessageHandlers = new();
-    private readonly List<WaitingForPartner> _waitingForPartnerHandlers = new();
+    private readonly List<IRandomClient.PartnerConnected> _partnerConnectedHandlers = new();
+    private readonly List<IRandomClient.PartnerDisconnected> _partnerDisconnectedHandlers = new();
+    private readonly List<IRandomClient.PartnerMessage> _partnerMessageHandlers = new();
+    private readonly List<IRandomClient.PartnerStartedTyping> _partnerStartedTypingHandlers = new();
+    private readonly List<IRandomClient.PartnerStoppedTyping> _partnerStoppedTypingHandlers = new();
+    private readonly List<IRandomClient.OutgoingMessage> _outgoingMessageHandlers = new();
+    private readonly List<IRandomClient.WaitingForPartner> _waitingForPartnerHandlers = new();
+
+    private readonly Stopwatch _lastTypingBroadcast = Stopwatch.StartNew();
+    private readonly Timer _typingCooldown;
+    
+    private readonly List<HistoricMessage> _history = new ();
     
     public bool HasPartner { get; private set; }
+    
+    public bool PartnerIsTyping { get; private set; }
+    
+    public IReadOnlyCollection<HistoricMessage> History => _history.ToImmutableArray();
 
-    public RandomClient(ILogger<RandomClient> log, Tcp.Client client)
+    public RandomClient(ILogger<RandomClient> log, IClient client)
     {
         _log = log;
         _client = client;
+        _typingCooldown = new Timer(async _ => await PartnerStoppedTypingHandler(), null, Timeout.Infinite, Timeout.Infinite);
     }
     
     public async Task ConnectAsync(int port)
@@ -30,6 +48,32 @@ public class RandomClient
         await _client.ConnectAsync(port);
     }
     
+    public async Task DisconnectAsync()
+    {
+        await _client.DisconnectAsync();
+    }
+    
+    public void OnPartnerConnected(IRandomClient.PartnerConnected callback) =>
+        _partnerConnectedHandlers.Add(callback);
+    
+    public void OnPartnerDisconnected(IRandomClient.PartnerDisconnected callback) =>
+        _partnerDisconnectedHandlers.Add(callback);
+    
+    public void OnPartnerStartedTyping(IRandomClient.PartnerStartedTyping callback) =>
+        _partnerStartedTypingHandlers.Add(callback);
+    
+    public void OnPartnerStoppedTyping(IRandomClient.PartnerStoppedTyping callback) =>
+        _partnerStoppedTypingHandlers.Add(callback);
+    
+    public void OnPartnerMessage(IRandomClient.PartnerMessage callback) =>
+        _partnerMessageHandlers.Add(callback);
+    
+    public void OnOutgoingMessage(IRandomClient.OutgoingMessage callback) =>
+        _outgoingMessageHandlers.Add(callback);
+    
+    public void OnWaitingForPartner(IRandomClient.WaitingForPartner callback) =>
+        _waitingForPartnerHandlers.Add(callback);
+    
     public async Task SendAsync(string message)
     {
         if (!HasPartner)
@@ -38,21 +82,50 @@ public class RandomClient
             return;
         }
         
+        await PartnerStoppedTypingHandler();
+
+        _history.Add(new HistoricMessage(true, DateTime.Now, message));
+        
+        foreach (var handler in _outgoingMessageHandlers)
+        {
+            try { await handler(new Message(DateTime.Now, message)); }
+            catch (Exception ex) { _log.LogError(ex, "Unhandled exception in {Delegate} on outgoing message", handler.Method.Name); }
+        }
+        
         await _client.SendAsync(new ServerMessage(ServerMessage.MessageType.PartnerMessage, message));
     }
     
-    public void OnPartnerConnected(PartnerConnected callback) =>
-        _partnerConnectedHandlers.Add(callback);
-    
-    public void OnPartnerDisconnected(PartnerDisconnected callback) =>
-        _partnerDisconnectedHandlers.Add(callback);
-    
-    public void OnPartnerMessage(PartnerMessage callback) =>
-        _partnerMessageHandlers.Add(callback);
-    
-    public void OnWaitingForPartner(WaitingForPartner callback) =>
-        _waitingForPartnerHandlers.Add(callback);
+    public async Task MarkAsTypingAsync()
+    {
+        if (!HasPartner)
+            return;
 
+        if (_lastTypingBroadcast.ElapsedMilliseconds < 1000)
+            return;
+        
+        await _client.SendAsync(new ServerMessage(ServerMessage.MessageType.PartnerTyping));
+        _lastTypingBroadcast.Restart();
+    }
+    
+    private async Task PartnerStoppedTypingHandler()
+    {
+        if (!PartnerIsTyping)
+            return;
+        
+        PartnerIsTyping = false;
+                
+        foreach (var handler in _partnerStoppedTypingHandlers)
+        {
+            try { await handler(); }
+            catch (Exception ex) { _log.LogError(ex, "Unhandled exception in {Delegate} on partner stopped typing", handler.Method.Name); }
+        }
+    }
+    
+    private async Task OnServerDisconnected()
+    {
+        await DisconnectAsync();
+    }
+    
     private Task OnServerConnected()
     {
         _log.LogInformation("Connected to server on port {Port}", _client.Port);
@@ -70,6 +143,7 @@ public class RandomClient
             case ServerMessage.MessageType.PartnerConnected:
                 _log.LogInformation("Partner connected");
                 HasPartner = true;
+                _history.Clear();
                 foreach (var handler in _partnerConnectedHandlers)
                 {
                     try { await handler(); }
@@ -86,8 +160,27 @@ public class RandomClient
                     catch (Exception ex) { _log.LogError(ex, "Unhandled exception in {Delegate} on partner disconnected", handler.Method.Name); }
                 }
                 break;
+
+            case ServerMessage.MessageType.PartnerTyping:
+            {
+                _typingCooldown.Change(5000, Timeout.Infinite);
+
+                if (PartnerIsTyping)
+                    break;
+
+                PartnerIsTyping = true;
+                
+                foreach (var handler in _partnerStartedTypingHandlers)
+                {
+                    try { await handler(); }
+                    catch (Exception ex) { _log.LogError(ex, "Unhandled exception in {Delegate} on partner started typing", handler.Method.Name); }
+                }
+                break;
+            }
             
             case ServerMessage.MessageType.PartnerMessage:
+                await PartnerStoppedTypingHandler();
+                
                 if (data.Data == null)
                 {
                     _log.LogWarning("Partner message is null");
@@ -95,9 +188,12 @@ public class RandomClient
                 }
                 
                 _log.LogInformation("Partner message: {Message}", data.Data);
+                
+                _history.Add(new HistoricMessage(false, DateTime.Now, data.Data));
+                
                 foreach (var handler in _partnerMessageHandlers)
                 {
-                    try { await handler(data.Data); }
+                    try { await handler(new Message(DateTime.Now, data.Data)); }
                     catch (Exception ex) { _log.LogError(ex, "Unhandled exception in {Delegate} on partner message", handler.Method.Name); }
                 }
                 break;
@@ -113,14 +209,4 @@ public class RandomClient
                 break;
         }
     }
-    
-    private Task OnServerDisconnected()
-    {
-        return Task.CompletedTask;
-    }
-    
-    public delegate Task PartnerConnected();
-    public delegate Task PartnerDisconnected();
-    public delegate Task PartnerMessage(string message);
-    public delegate Task WaitingForPartner();
 }

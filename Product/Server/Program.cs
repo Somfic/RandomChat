@@ -4,14 +4,7 @@ using Microsoft.Extensions.Logging;
 using RandomChat;
 using RandomChat.Abstractions;
 
-var services = BuildServices();
-var server = services.GetRequiredService<IRandomServer>();
-
-await server.StartAsync();
-
-Console.ReadKey();
-
-IServiceProvider BuildServices() => Host.CreateDefaultBuilder()
+var services = Host.CreateDefaultBuilder()
     .ConfigureServices(services =>
     {
         services.AddSingleton<Tcp.Abstractions.IServer, Tcp.Server>();
@@ -25,3 +18,11 @@ IServiceProvider BuildServices() => Host.CreateDefaultBuilder()
     })
     .Build()
     .Services;
+
+var server = services.GetRequiredService<IRandomServer>();
+
+await server.StartAsync();
+
+Console.ReadKey();
+
+await server.StopAsync();

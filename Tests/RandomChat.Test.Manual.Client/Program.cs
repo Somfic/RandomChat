@@ -2,9 +2,10 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using RandomChat;
+using RandomChat.Abstractions;
 
 var services = BuildServices();
-var client = services.GetRequiredService<RandomClient>();
+var client = services.GetRequiredService<IRandomClient>();
 
 Console.Write("Enter port: ");
 var port = int.Parse(Console.ReadLine()!);
@@ -20,8 +21,8 @@ while (true)
 IServiceProvider BuildServices() => Host.CreateDefaultBuilder()
     .ConfigureServices(services =>
     {
-        services.AddTransient<Tcp.Client>();
-        services.AddTransient<RandomClient>();
+        services.AddTransient<Tcp.Abstractions.IClient, Tcp.Client>();
+        services.AddTransient<IRandomClient, RandomClient>();
     })
     .ConfigureLogging(logging =>
     {

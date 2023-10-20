@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using RandomChat.Abstractions;
 
 namespace RandomChat.Tests;
 
@@ -50,59 +51,57 @@ public class Tests
         
         var client1 = clients[0];
         var client2 = clients[1];
+
+        var client1To2Message = "abc";
+        var client2To1Message = "cba";
         
-        var client1Matched = new TaskCompletionSource<bool>();
-        var client2Matched = new TaskCompletionSource<bool>();
+        var client1ReceivedMessage = new TaskCompletionSource<string>();
+        var client2ReceivedMessage = new TaskCompletionSource<string>();
         
-        client1.OnPartnerConnected(() =>
-        {
-            client1Matched.SetResult(true);
-            return Task.CompletedTask;
-        });
+        client1.OnPartnerConnected(async () => await client1.SendAsync(client1To2Message));
+        client2.OnPartnerConnected(async () => await client2.SendAsync(client2To1Message));
         
-        client2.OnPartnerConnected(() =>
-        {
-            client2Matched.SetResult(true);
-            return Task.CompletedTask;
-        });
+        client1.OnPartnerMessage(async message => client1ReceivedMessage.SetResult(message.Content));
+        client2.OnPartnerMessage(async message => client2ReceivedMessage.SetResult(message.Content));
         
         await server.StartAsync();
         
         await client1.ConnectAsync(server.Port);
         await client2.ConnectAsync(server.Port);
-        
-        await Task.WhenAny(client1Matched.Task, client2Matched.Task, Task.Delay(1000));
 
+        await client1ReceivedMessage.Task;
+        await client2ReceivedMessage.Task;
+        
+        Assert.That(client1ReceivedMessage.Task.Result, Is.EqualTo(client2To1Message));
+        Assert.That(client2ReceivedMessage.Task.Result, Is.EqualTo(client1To2Message));
+        
         await server.StopAsync();
-        
-        Assert.That(server.WaitingClients, Has.Count.EqualTo(0));
-        Assert.That(server.Rooms, Has.Count.EqualTo(2));
     }
     
-    private static (RandomServer server, RandomClient client) BuildServerClient()
+    private static (IRandomServer server, IRandomClient client) BuildServerClient()
     {
         var services = BuildServices();
         
-        return (services.GetRequiredService<RandomServer>(),
-            services.GetRequiredService<RandomClient>());
+        return (services.GetRequiredService<IRandomServer>(),
+            services.GetRequiredService<IRandomClient>());
     }
     
-    private static (RandomServer server, RandomClient[] clients) BuildServerClients(int amountOfClients)
+    private static (IRandomServer server, IRandomClient[] clients) BuildServerClients(int amountOfClients)
     {
         var services = BuildServices();
         
-        return (services.GetRequiredService<RandomServer>(),
-            Enumerable.Range(0, amountOfClients).Select(_ => services.GetRequiredService<RandomClient>()).ToArray());
+        return (services.GetRequiredService<IRandomServer>(),
+            Enumerable.Range(0, amountOfClients).Select(_ => services.GetRequiredService<IRandomClient>()).ToArray());
     }
         
     private static IServiceProvider BuildServices() => Host.CreateDefaultBuilder()
         .ConfigureServices(services =>
         {
-            services.AddSingleton<Tcp.Server>();
-            services.AddSingleton<RandomServer>();
+            services.AddSingleton<Tcp.Abstractions.IServer, Tcp.Server>();
+            services.AddSingleton<IRandomServer, RandomServer>();
             
-            services.AddTransient<Tcp.Client>();
-            services.AddTransient<RandomClient>();
+            services.AddTransient<Tcp.Abstractions.IClient, Tcp.Client>();
+            services.AddTransient<IRandomClient, RandomClient>();
         })
         .ConfigureLogging(logging =>
         {

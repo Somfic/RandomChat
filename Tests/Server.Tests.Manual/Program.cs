@@ -1,14 +1,13 @@
-﻿using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Tcp;
+using Server.Tests.Manual;
 
 var host = Host.CreateDefaultBuilder(args)
     .ConfigureServices(services =>
     {
-        services.AddSingleton<Server>();
-        services.AddSingleton<Client>();
+        services.AddSingleton<Tcp.Abstractions.IServer, Tcp.Server>();
+        services.AddSingleton<Tcp.Abstractions.IClient, Tcp.Client>();
     })
     .ConfigureLogging(logging =>
     {
@@ -18,8 +17,8 @@ var host = Host.CreateDefaultBuilder(args)
     })
     .Build();
 
-var server = host.Services.GetRequiredService<Server>();
-var client = host.Services.GetRequiredService<Client>();
+var server = host.Services.GetRequiredService<Tcp.Abstractions.IServer>();
+var client = host.Services.GetRequiredService<Tcp.Abstractions.IClient>();
 
 client.OnServerConnected(async () =>
 {
@@ -38,13 +37,3 @@ Console.WriteLine("Press any key to exit");
 Console.ReadKey();
 
 await server.StopAsync();
-
-struct TestMessage
-{
-    public TestMessage(string data)
-    {
-        Data = data;
-    }
-    
-    public string Data { get; }
-}

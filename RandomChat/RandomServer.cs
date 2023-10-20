@@ -1,19 +1,21 @@
 ﻿using System.Collections.Immutable;
-using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using RandomChat.Abstractions;
+using RandomChat.Models;
+using Tcp.Abstractions;
 
 namespace RandomChat;
 
-public class RandomServer
+public class RandomServer : IRandomServer
 {
     private readonly ILogger<RandomServer> _log;
-    private readonly Tcp.Server _server;
+    private readonly IServer _server;
     
     private readonly List<Guid> _waitingClients = new();
     private readonly Dictionary<Guid, Guid> _rooms = new();
 
-    public RandomServer(ILogger<RandomServer> log, Tcp.Server server)
+    public RandomServer(ILogger<RandomServer> log, IServer server)
     {
         _log = log;
         _server = server;
@@ -32,6 +34,11 @@ public class RandomServer
         
         await _server.StartAsync();
     }
+    
+    public async Task StopAsync()
+    {
+        await _server.StopAsync();
+    }
 
     private async Task OnClientConnected(Guid client)
     {
@@ -41,27 +48,41 @@ public class RandomServer
     private async Task OnClientMessage(Guid client, string json)
     {
         var data = JsonConvert.DeserializeObject<ServerMessage>(json);
-        
-        if (data.Type != ServerMessage.MessageType.PartnerMessage)
-            return;
-        
-        if (string.IsNullOrEmpty(data.Data))
-            return;
-        
-        if (!_rooms.ContainsKey(client))
+
+        switch (data.Type)
         {
-            _log.LogWarning("Client {Client} is not in a room", client);
-            return;
+            case ServerMessage.MessageType.PartnerMessage:
+            {
+                if (string.IsNullOrEmpty(data.Data))
+                    break;
+
+                if (!_rooms.ContainsKey(client))
+                {
+                    _log.LogWarning("Client {Client} is not in a room", client);
+                    break;
+                }
+                
+                if (_rooms.TryGetValue(client, out var partner))
+                    await _server.SendAsync(partner,
+                        new ServerMessage(ServerMessage.MessageType.PartnerMessage, data.Data));
+
+                break;
+            }
+
+            case ServerMessage.MessageType.PartnerTyping:
+            {
+                if (_rooms.TryGetValue(client, out var partner))
+                    await _server.SendAsync(partner,
+                        new ServerMessage(ServerMessage.MessageType.PartnerTyping));
+                break;
+            }
         }
-        
-        
-        if (_rooms.TryGetValue(client, out var partner))
-            await _server.SendAsync(partner, new ServerMessage(ServerMessage.MessageType.PartnerMessage, data.Data));
     }
 
     private async Task OnClientDisconnected(Guid client)
     {
-        _log.LogDebug("Cleaning up room");
+        // Remove client from queue
+        _waitingClients.Remove(client);
         
         // Check if the partner is still connected
         if (_rooms.TryGetValue(client, out var partner))
@@ -120,10 +141,5 @@ public class RandomServer
         
         await _server.SendAsync(client1, new ServerMessage(ServerMessage.MessageType.PartnerConnected));
         await _server.SendAsync(client2, new ServerMessage(ServerMessage.MessageType.PartnerConnected));
-    }
-
-    public async Task StopAsync()
-    {
-        await _server.StopAsync();
     }
 }

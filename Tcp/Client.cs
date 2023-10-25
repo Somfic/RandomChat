@@ -28,12 +28,15 @@ public class Client : IClient
     }
 
     public int Port => _client.Client.LocalEndPoint is IPEndPoint endpoint ? endpoint.Port : 0;
+    public int? LastPort => GetLastUsedPort();
 
     public async Task ConnectAsync(int? port = null)
     {
         _port = port ?? _port;
         
         _log.LogDebug("Connecting to port {Port} ... ", _port);
+
+        SetLastUsedPort(_port);
         
         await _client.ConnectAsync(IPAddress.Loopback, _port);
 
@@ -44,7 +47,7 @@ public class Client : IClient
 
         Task.Run(async () => await HandleServer());
     }
-    
+
     public void OnServerConnected(IClient.ServerConnectedDelegate callback) =>
         _connectedHandlers.Add(callback);
     
@@ -121,5 +124,23 @@ public class Client : IClient
         }
 
         _log.LogInformation("Disconnected from server");
+    }
+    
+    private int? GetLastUsedPort()
+    {
+        if (!File.Exists("cache"))
+            return null;
+        
+        var port = File.ReadAllText("cache");
+        
+        if (int.TryParse(port, out var result))
+            return result;
+        
+        return null;
+    }
+    
+    private void SetLastUsedPort(int port)
+    {
+        File.WriteAllText("cache", port.ToString());
     }
 }

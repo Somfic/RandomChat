@@ -21,7 +21,9 @@ public interface IClient
     /// The port the client is connected to.
     /// </summary>
     int Port { get; }
-    
+
+    int? LastPort { get; }
+
     /// <summary>
     /// Connects to a server.
     /// </summary>

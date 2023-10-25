@@ -35,6 +35,12 @@ public partial class ConnectToServerForm : Form
         });
 
         InitializeComponent();
+        
+        Shown += (_, _) =>
+        {
+            if (client.LastPort is null) return;
+            Invoke(() => txtPort.Text = client.LastPort.Value.ToString());
+        };
     }
 
     private void txtPort_TextChanged(object sender, EventArgs e)

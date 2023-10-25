@@ -53,7 +53,9 @@ public interface IRandomClient
     /// A collection of all messages sent and received by the client.
     /// </summary>
     IReadOnlyCollection<HistoricMessage> History { get; }
-    
+
+    int? LastPort { get; }
+
     /// <summary>
     /// Connects to a server.
     /// </summary>

@@ -27,8 +27,10 @@ AnsiConsole.Write(
     new FigletText("RandomChat")
         .Centered()
         .Color(Color.Pink1));
-        
-var port = AnsiConsole.Ask<int>("[Purple]Server port[/]:");
+
+var port = client.LastPort is null
+    ? AnsiConsole.Ask<int>("[Purple]Server port[/]:")
+    : AnsiConsole.Ask("[Purple]Server port[/]:", client.LastPort!.Value);
 
 client.OnWaitingForPartner(() =>
 {

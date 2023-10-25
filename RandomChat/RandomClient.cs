@@ -29,6 +29,8 @@ public class RandomClient : IRandomClient
     public bool HasPartner { get; private set; }
     
     public bool PartnerIsTyping { get; private set; }
+
+    public int? LastPort => _client.LastPort;
     
     public IReadOnlyCollection<HistoricMessage> History => _history.ToImmutableArray();
 
